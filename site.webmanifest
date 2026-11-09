@@ -1,0 +1,27 @@
+{
+ "name": "Японские Мишки — доставка в Салехарде",
+ "short_name": "ЯМишки",
+ "lang": "ru",
+ "start_url": "/yamishki-demo/",
+ "display": "standalone",
+ "background_color": "#f7f5fb",
+ "theme_color": "#7F47D8",
+ "icons": [
+  {
+   "src": "/yamishki-demo/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "/yamishki-demo/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "/yamishki-demo/icon-maskable-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}
