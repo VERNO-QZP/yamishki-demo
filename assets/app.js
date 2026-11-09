@@ -17,7 +17,7 @@
     bag: '<path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'
   };
   P.pin = '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>';
-  var ORDER_URL = document.body.getAttribute("data-order") || "";
+  var ORDER_URL = document.body.getAttribute("data-order") || "", MAX_Q = 50, sending = false;
   var MAPS_KEY = document.body.getAttribute("data-ymaps") || "", YM_ID = document.body.getAttribute("data-ym") || "", OUT_OF_TOWN = 500;
   var ic = function (n) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + P[n] + "</svg>"; };
 
@@ -43,7 +43,12 @@
 
   /* ---------- cart (snapshot so it works across pages) ---------- */
   var cart = store.get("ym_cart2", {});
+  if (!cart || typeof cart !== "object" || Array.isArray(cart)) cart = {};
   Object.keys(cart).forEach(function (id) {
+    var c = cart[id];
+    if (!/^\d+$/.test(id) || !c || typeof c !== "object" || !(c.q > 0) || !(c.p >= 0)) { delete cart[id]; return; }
+    c.q = Math.min(MAX_Q, Math.floor(c.q));
+    c.n = String(c.n || ""); c.m = String(c.m || ""); c.img = String(c.img || "");
     if (!cart[id] || !cart[id].q) delete cart[id];
     else if (items[id]) { cart[id].n = items[id].n; cart[id].p = items[id].p; cart[id].m = items[id].m; cart[id].img = items[id].img; }
   });
@@ -72,6 +77,7 @@
   function inc(id) {
     var it = items[id] || cart[id]; if (!it) return;
     if (!cart[id]) cart[id] = { n: it.n, p: it.p, m: it.m, img: it.img, q: 0 };
+    if (cart[id].q >= MAX_Q) { toast("Больше " + MAX_Q + " порций одной позиции — закажите по телефону 6-11-99"); return; }
     cart[id].q++; refresh(id);
     if (cart[id].q === 1) toast("Добавлено: " + it.n);
   }
@@ -114,7 +120,7 @@
     var i = items[id], m = $("#modal"); if (!i) return;
     m.setAttribute("data-id", id);
     var k = i.k ? i.k.match(/(\d+)\s*ккал.*?Б\s*([\d.,]+).*?Ж\s*([\d.,]+).*?У\s*([\d.,]+)/) : null;
-    m.innerHTML = '<div class="mimg"><img src="' + i.img + '" width="640" height="480" alt="' + esc(i.n) + '"></div><div class="mb"><button type="button" class="x" data-close aria-label="Закрыть">' + ic("x") + '</button><h2 id="mTitle">' + esc(i.n) + '</h2><div class="meta">' + esc(i.m) + "</div>" + (i.d ? "<p>" + esc(i.d) + "</p>" : "") +
+    m.innerHTML = '<div class="mimg"><img src="' + esc(i.img) + '" width="640" height="480" alt="' + esc(i.n) + '"></div><div class="mb"><button type="button" class="x" data-close aria-label="Закрыть">' + ic("x") + '</button><h2 id="mTitle">' + esc(i.n) + '</h2><div class="meta">' + esc(i.m) + "</div>" + (i.d ? "<p>" + esc(i.d) + "</p>" : "") +
       (k ? '<div class="kbju" aria-label="Пищевая ценность"><span>' + k[1] + "&nbsp;ккал</span><span>Б&nbsp;" + k[2] + "&nbsp;г</span><span>Ж&nbsp;" + k[3] + "&nbsp;г</span><span>У&nbsp;" + k[4] + "&nbsp;г</span></div>" : "") +
       '<div class="ft"><span class="price">' + rub(i.p) + '</span><span class="ctl">' + ctl(id, i.n) + "</span></div></div>";
     openLayer(m);
@@ -134,7 +140,7 @@
     $("#dBody").innerHTML = '<div class="progress">' + (left ? "До бесплатной доставки — <b>" + rub(left) + "</b>" : "<b>Доставка по городу бесплатно</b>") + '<div class="bar"><i style="transform:scaleX(' + Math.min(1, t / FREE).toFixed(3) + ')"></i></div></div>' +
       ids.map(function (id) {
         var i = cart[id];
-        return '<div class="ci"><img src="' + i.img + '" width="64" height="64" alt=""><div><b>' + esc(i.n) + '</b><div class="meta">' + esc(i.m) + '</div><div class="qty"><button type="button" data-dec="' + id + '" aria-label="Меньше: ' + esc(i.n) + '">' + ic("minus") + "</button><span>" + i.q + '</span><button type="button" data-inc="' + id + '" aria-label="Больше: ' + esc(i.n) + '">' + ic("plus") + '</button></div></div><span class="sum">' + rub(i.p * i.q) + "</span></div>";
+        return '<div class="ci"><img src="' + esc(i.img) + '" width="64" height="64" alt=""><div><b>' + esc(i.n) + '</b><div class="meta">' + esc(i.m) + '</div><div class="qty"><button type="button" data-dec="' + id + '" aria-label="Меньше: ' + esc(i.n) + '">' + ic("minus") + "</button><span>" + i.q + '</span><button type="button" data-inc="' + id + '" aria-label="Больше: ' + esc(i.n) + '">' + ic("plus") + '</button></div></div><span class="sum">' + rub(i.p * i.q) + "</span></div>";
       }).join("") + '<p class="note">К каждой порции роллов — соевый соус, имбирь и васаби. Дополнительные соусы — в разделе <a href="/yamishki-demo/menu/dopolnitelno/">«Соусы и добавки»</a>.</p>';
     $("#dFoot").innerHTML = '<div class="row"><span>Товары, ' + count() + " шт.</span><span>" + rub(t) + '</span></div><div class="row"><span>Доставка</span><span>' + (left ? "уточнит оператор" : "бесплатно") + '</span></div><div class="row total"><span>Итого</span><span>' + rub(t) + '</span></div><button type="button" class="btn btn-b" style="width:100%;margin-top:12px" id="toCheckout">Перейти к оформлению</button>';
     $("#toCheckout").onclick = renderCheckout;
@@ -263,6 +269,7 @@
 
   /* ---------- send order to admin (order.php → VK/Telegram), fallback to manual ---------- */
   function sendOrder(f, text, sum) {
+    if (sending) return; sending = true;
     var btn = $('#dFoot [type="submit"]');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span aria-live="polite">Отправляем заказ…</span>'; }
     var payload = {
@@ -276,9 +283,11 @@
       : fetch(ORDER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
         .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (j) { j.status = r.status; return j; }); });
     req.then(function (res) {
+      sending = false;
       if (!res || !res.ok) throw res || {};
       showSuccess(res, f, sum);
     }).catch(function (err) {
+      sending = false;
       var why = err && err.error === "too_many" ? "Слишком много заказов подряд. Подождите несколько минут или позвоните нам." : "Не получилось отправить заказ через сайт. Позвоните нам — примем по телефону.";
       showManual(text, why);
     });
