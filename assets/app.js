@@ -16,6 +16,8 @@
     check: '<path d="m5 12 5 5L20 7"/>', phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
     bag: '<path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'
   };
+  P.pin = '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>';
+  var MAPS_KEY = document.body.getAttribute("data-ymaps") || "", YM_ID = document.body.getAttribute("data-ym") || "", OUT_OF_TOWN = 500;
   var ic = function (n) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + P[n] + "</svg>"; };
 
   /* ---------- opening hours (Салехард, UTC+5) ---------- */
@@ -27,6 +29,8 @@
   var open = cur >= mins(today[0]) && cur < mins(today[1]);
   var st = $("#status");
   if (st) st.innerHTML = '<i class="dot ' + (open ? "" : "off") + '"></i>Салехард · ' + (open ? "Сегодня работаем до " + today[1] : "Сейчас закрыто, откроемся в " + today[0]);
+  var stm = $("#statusM");
+  if (stm) stm.innerHTML = '<i class="dot ' + (open ? "" : "off") + '"></i>' + (open ? "Открыто до " + today[1] : "Закрыто · с " + today[0]);
   $$(".hours [data-day]").forEach(function (el) { if (+el.getAttribute("data-day") === di) el.classList.add("today"); });
 
   /* ---------- catalogue from prerendered cards ---------- */
@@ -145,6 +149,8 @@
       field("fName", "name", "Имя", f.name, 'autocomplete="given-name" placeholder="Анна…"') +
       field("fPhone", "tel", "Телефон", f.phone, 'type="tel" inputmode="tel" autocomplete="tel" spellcheck="false" required placeholder="+7 912 345-67-89…"') +
       '<div id="addrBox"' + (f.type === "pickup" ? " hidden" : "") + ">" + field("fStreet", "street", "Улица и дом", f.street, 'autocomplete="address-line1" placeholder="ул. Республики, 73…"') +
+      (MAPS_KEY ? '<button type="button" class="mapbtn" id="pickOnMap">' + ic("pin") + "Указать на карте</button>" : "") +
+      '<p class="note" id="zoneNote"' + (f.zone ? "" : " hidden") + ">" + (f.zone === "out" ? "Адрес за городом — доставка " + rub(OUT_OF_TOWN) + "." : "") + "</p>" +
       '<div class="four"><div>' + field("fApt", "apt", "Кв.", f.apt, 'inputmode="numeric" autocomplete="off"') + "</div><div>" + field("fEnt", "entrance", "Подъезд", f.ent, 'inputmode="numeric" autocomplete="off"') + "</div><div>" + field("fFloor", "floor", "Этаж", f.floor, 'inputmode="numeric" autocomplete="off"') + "</div><div>" + field("fCode", "intercom", "Домофон", f.code, 'autocomplete="off" spellcheck="false"') + "</div></div></div>" +
       '<p class="note" id="pickupNote"' + (f.type === "pickup" ? "" : " hidden") + ">Самовывоз: Салехард, ул. Матросова, 26.</p>" +
       '<label for="fWhen">Когда привезти</label><select id="fWhen" name="when"><option value="asap">Как можно скорее</option><option value="time"' + (f.when === "time" ? " selected" : "") + ">Ко времени (интервал 30 минут)</option></select>" +
@@ -153,7 +159,7 @@
       '<div id="changeBox"' + (f.pay === "card" ? " hidden" : "") + ">" + field("fChange", "change", "С какой купюры нужна сдача", f.change, 'inputmode="numeric" autocomplete="off" placeholder="5000…"') + "</div>" +
       field("fPersons", "persons", "Количество персон", f.persons || 1, 'type="number" min="1" max="30" inputmode="numeric" autocomplete="off"') +
       '<label for="fComment">Комментарий</label><textarea id="fComment" name="comment" autocomplete="off" placeholder="Без лука, позвонить за 10 минут…"></textarea>' +
-      '<label class="chk" for="fAgree"><input type="checkbox" id="fAgree" name="agree" aria-describedby="fAgreeErr"' + (f.agree ? " checked" : "") + '><span>Согласен на обработку персональных данных по <a href="/yamishki-demo/politika/" target="_blank">политике конфиденциальности</a></span></label><p class="ferr" id="fAgreeErr" hidden></p>' +
+      '<label class="chk" for="fAgree"><input type="checkbox" id="fAgree" name="agree" aria-describedby="fAgreeErr"><span>Даю <a href="/yamishki-demo/soglasie/" target="_blank">согласие на обработку персональных данных</a> и подтверждаю, что ознакомлен с <a href="/yamishki-demo/politika/" target="_blank">политикой</a> и <a href="/yamishki-demo/oferta/" target="_blank">офертой</a></span></label><p class="ferr" id="fAgreeErr" hidden></p>' +
       "</form>";
     $("#dFoot").innerHTML = '<div class="row total"><span>К оплате</span><span>' + rub(total()) + '</span></div><button type="submit" form="orderForm" class="btn btn-b" style="width:100%;margin-top:12px">Отправить заказ</button><button type="button" class="btn btn-text" style="width:100%;margin-top:4px" id="backCart">Вернуться в корзину</button>';
     $$("[data-seg]").forEach(function (b) {
@@ -164,10 +170,64 @@
       };
     });
     $("#fWhen").onchange = function (e) { f.when = e.target.value; $("#timeBox").hidden = f.when !== "time"; };
+    if ($("#pickOnMap")) $("#pickOnMap").onclick = function () { collect(); renderMap(); };
+    $("#fStreet").addEventListener("input", function () { f.zone = ""; $("#zoneNote").hidden = true; });
     $("#backCart").onclick = function () { view = "cart"; renderCart(); };
     $("#orderForm").onsubmit = function (e) { e.preventDefault(); placeOrder(); };
     $("#orderForm").addEventListener("input", function (e) { if (e.target.getAttribute("aria-invalid") === "true") setErr(e.target.id, ""); });
   }
+  /* ---------- address on Yandex map (needs free JS API key) ---------- */
+  var ymapsReady = null, ymap = null;
+  function loadYmaps() {
+    if (ymapsReady) return ymapsReady;
+    ymapsReady = new Promise(function (ok, fail) {
+      var sc = document.createElement("script");
+      sc.src = "https://api-maps.yandex.ru/2.1/?apikey=" + encodeURIComponent(MAPS_KEY) + "&lang=ru_RU";
+      sc.onload = function () { window.ymaps.ready(ok); }; sc.onerror = fail; document.head.appendChild(sc);
+    });
+    return ymapsReady;
+  }
+  function renderMap() {
+    view = "map"; $("#dTitle").textContent = "Адрес на карте";
+    var picked = null;
+    $("#dBody").innerHTML = '<div class="mapview" id="mapView"><div id="ymap" role="application" aria-label="Карта: передвиньте карту, чтобы булавка указала на ваш дом"></div><div class="pin" aria-hidden="true"><svg viewBox="0 0 40 52"><path d="M20 51S3 34 3 20a17 17 0 0 1 34 0c0 14-17 31-17 31Z" fill="#6c33d1"/><circle cx="20" cy="20" r="7" fill="#fff"/></svg></div>' +
+      '<div class="mapaddr" id="mapAddr" aria-live="polite"><span>Загружаем карту…</span></div></div>';
+    $("#dFoot").innerHTML = '<button type="button" class="btn btn-b" style="width:100%" id="mapOk" disabled>Доставить сюда</button><button type="button" class="btn btn-text" style="width:100%;margin-top:4px" id="mapBack">Ввести адрес вручную</button>';
+    $("#mapBack").onclick = renderCheckout;
+    $("#mapOk").onclick = function () {
+      if (!picked) return;
+      form.street = picked.street; form.zone = picked.zone; form.coords = picked.coords;
+      store.set("ym_form", Object.assign({}, form, { comment: undefined, agree: undefined }));
+      renderCheckout();
+      var zn = $("#zoneNote"); zn.hidden = false;
+      zn.textContent = picked.zone === "out" ? "Адрес за городом — доставка " + rub(OUT_OF_TOWN) + ", время 1,5–2,5 часа." : "Адрес в городе — доставка бесплатно от " + rub(FREE) + ".";
+    };
+    loadYmaps().then(function () {
+      var Y = window.ymaps, center = form.coords || [66.5298, 66.6145];
+      ymap = new Y.Map("ymap", { center: center, zoom: form.coords ? 17 : 14, controls: ["zoomControl", "geolocationControl"] }, { suppressMapOpenBlock: true });
+      var mv = $("#mapView"), seq = 0;
+      var lookup = function () {
+        var c = ymap.getCenter(), my = ++seq;
+        $("#mapAddr").innerHTML = "<span>Определяем адрес…</span>"; $("#mapOk").disabled = true;
+        Y.geocode(c, { kind: "house", results: 1 }).then(function (res) {
+          if (my !== seq) return;
+          var g = res.geoObjects.get(0);
+          if (!g) { $("#mapAddr").innerHTML = "<span>Здесь нет дома. Передвиньте булавку на здание.</span>"; return; }
+          var street = [g.getThoroughfare(), g.getPremiseNumber()].filter(Boolean).join(", ") || g.getAddressLine();
+          var locs = (g.getLocalities() || []).join(", ");
+          var dist = Y.coordSystem.geo.getDistance(c, [66.5298, 66.6145]);
+          var inCity = /Салехард/.test(locs) && !/ДНТ|СНТ|ДНП|СОТ|посёлок|поселок|село|деревня/i.test(locs + " " + g.getAddressLine()) && dist < 8000;
+          picked = { street: street, zone: inCity ? "city" : "out", coords: c };
+          $("#mapAddr").innerHTML = "<b>" + esc(street) + "</b><span>" + esc(locs || "") + "</span><br>" + (inCity ? '<span class="zone">В городе · бесплатно от ' + rub(FREE) + "</span>" : '<span class="zone out">За городом · доставка ' + rub(OUT_OF_TOWN) + "</span>");
+          $("#mapOk").disabled = false;
+        }, function () { if (my === seq) $("#mapAddr").innerHTML = "<span>Не удалось определить адрес. Введите его вручную.</span>"; });
+      };
+      ymap.events.add("actionbegin", function () { mv.classList.add("moving"); });
+      ymap.events.add("actionend", function () { mv.classList.remove("moving"); lookup(); });
+      lookup();
+    }, function () { $("#mapAddr").innerHTML = "<span>Карта не загрузилась. Введите адрес вручную.</span>"; });
+  }
+
   function setErr(id, msg) {
     var el = $("#" + id), er = $("#" + id + "Err"); if (!el || !er) return;
     el.setAttribute("aria-invalid", msg ? "true" : "false"); er.textContent = msg; er.hidden = !msg;
@@ -176,7 +236,7 @@
     var g = function (id) { var el = $(id); return el ? el.value.trim() : ""; };
     ["name", "phone", "street", "apt", "ent", "floor", "code", "time", "change", "persons"].forEach(function (k) { form[k] = g("#f" + k.charAt(0).toUpperCase() + k.slice(1)); });
     form.comment = g("#fComment"); form.when = g("#fWhen"); form.agree = $("#fAgree").checked;
-    var keep = {}; Object.keys(form).forEach(function (k) { if (k !== "comment") keep[k] = form[k]; });
+    var keep = {}; Object.keys(form).forEach(function (k) { if (k !== "comment" && k !== "agree") keep[k] = form[k]; });
     store.set("ym_form", keep);
   }
   function placeOrder() {
@@ -189,7 +249,8 @@
     var t = total();
     var lines = Object.keys(cart).map(function (id) { var i = cart[id]; return "• " + i.n + " × " + i.q + " = " + rub(i.p * i.q); });
     var addr = [f.street, f.apt && "кв. " + f.apt, f.ent && "подъезд " + f.ent, f.floor && "этаж " + f.floor, f.code && "домофон " + f.code].filter(Boolean).join(", ");
-    var text = ["Заказ с сайта — Японские Мишки", ""].concat(lines, ["", "Итого: " + rub(t) + (t >= FREE && f.type !== "pickup" ? " (доставка бесплатно)" : ""), "",
+    var outFee = f.type !== "pickup" && f.zone === "out" ? OUT_OF_TOWN : 0;
+    var text = ["Заказ с сайта — Японские Мишки", ""].concat(lines, ["", outFee ? "Доставка за город: " + rub(outFee) : "", "Итого: " + rub(t + outFee) + (!outFee && t >= FREE && f.type !== "pickup" ? " (доставка бесплатно)" : ""), "",
       "Имя: " + (f.name || "—"), "Телефон: " + f.phone, f.type === "pickup" ? "Самовывоз (Матросова, 26)" : "Адрес: " + addr,
       "Когда: " + (f.when === "time" ? (f.time || "ко времени") : "как можно скорее"),
       "Оплата: " + (f.pay === "card" ? "картой при получении" : "наличными" + (f.change ? ", сдача с " + f.change : "")),
@@ -279,6 +340,29 @@
     else if (t.hasAttribute("data-close")) { if (t.tagName !== "A") e.preventDefault(); closeAll(); }
   });
   $("#ov").onclick = closeAll;
+
+  /* ---------- pickup map: loads only on click (Yandex may set cookies) ---------- */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-loadmap]"); if (!b) return;
+    var box = b.closest(".mapembed");
+    box.innerHTML = '<iframe src="' + box.getAttribute("data-mapsrc") + '" title="Японские Мишки на Яндекс Картах: Салехард, ул. Матросова, 26" loading="lazy" allowfullscreen></iframe>';
+  });
+
+  /* ---------- cookie consent: Метрика только после согласия ---------- */
+  function loadMetrika() {
+    (function (m, e, t, r, i, k, a) { m[i] = m[i] || function () { (m[i].a = m[i].a || []).push(arguments); }; m[i].l = 1 * new Date(); k = e.createElement(t); a = e.getElementsByTagName(t)[0]; k.async = 1; k.src = r; a.parentNode.insertBefore(k, a); })(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+    window.ym(+YM_ID, "init", { clickmap: true, trackLinks: true, accurateTrackBounce: true });
+  }
+  if (YM_ID) {
+    var cc = store.get("ym_cookie", null);
+    if (cc === "all") loadMetrika();
+    else if (cc === null) {
+      var bn = document.createElement("div"); bn.className = "cookie"; bn.setAttribute("role", "region"); bn.setAttribute("aria-label", "Cookie");
+      bn.innerHTML = '<p>Мы используем cookie и сервис «Яндекс Метрика», чтобы понимать, как работает сайт. Подробнее — в <a href="/yamishki-demo/politika/">политике</a>.</p><div class="btns"><button type="button" class="btn btn-b" data-c="all">Принять</button><button type="button" class="btn btn-o" data-c="min">Только необходимые</button></div>';
+      document.body.appendChild(bn);
+      $$("[data-c]", bn).forEach(function (x) { x.onclick = function () { var v = x.getAttribute("data-c"); store.set("ym_cookie", v); bn.remove(); if (v === "all") loadMetrika(); }; });
+    }
+  }
   $("#cartBtn").onclick = openCart; $("#mCart").onclick = openCart;
   if (Object.keys(cart).length) { Object.keys(cart).forEach(function (id) { if (items[id]) refresh(id); }); refresh(); }
 })();
