@@ -17,6 +17,7 @@
     bag: '<path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'
   };
   P.pin = '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>';
+  var ORDER_URL = document.body.getAttribute("data-order") || "";
   var MAPS_KEY = document.body.getAttribute("data-ymaps") || "", YM_ID = document.body.getAttribute("data-ym") || "", OUT_OF_TOWN = 500;
   var ic = function (n) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + P[n] + "</svg>"; };
 
@@ -159,6 +160,7 @@
       '<div id="changeBox"' + (f.pay === "card" ? " hidden" : "") + ">" + field("fChange", "change", "С какой купюры нужна сдача", f.change, 'inputmode="numeric" autocomplete="off" placeholder="5000…"') + "</div>" +
       field("fPersons", "persons", "Количество персон", f.persons || 1, 'type="number" min="1" max="30" inputmode="numeric" autocomplete="off"') +
       '<label for="fComment">Комментарий</label><textarea id="fComment" name="comment" autocomplete="off" placeholder="Без лука, позвонить за 10 минут…"></textarea>' +
+      '<div style="position:absolute;left:-5000px" aria-hidden="true"><label for="fWebsite">Сайт</label><input id="fWebsite" name="website" tabindex="-1" autocomplete="off"></div>' +
       '<label class="chk" for="fAgree"><input type="checkbox" id="fAgree" name="agree" aria-describedby="fAgreeErr"><span>Даю <a href="/yamishki-demo/soglasie/" target="_blank">согласие на обработку персональных данных</a> и подтверждаю, что ознакомлен с <a href="/yamishki-demo/politika/" target="_blank">политикой</a> и <a href="/yamishki-demo/oferta/" target="_blank">офертой</a></span></label><p class="ferr" id="fAgreeErr" hidden></p>' +
       "</form>";
     $("#dFoot").innerHTML = '<div class="row total"><span>К оплате</span><span>' + rub(total()) + '</span></div><button type="submit" form="orderForm" class="btn btn-b" style="width:100%;margin-top:12px">Отправить заказ</button><button type="button" class="btn btn-text" style="width:100%;margin-top:4px" id="backCart">Вернуться в корзину</button>';
@@ -255,8 +257,44 @@
       "Когда: " + (f.when === "time" ? (f.time || "ко времени") : "как можно скорее"),
       "Оплата: " + (f.pay === "card" ? "картой при получении" : "наличными" + (f.change ? ", сдача с " + f.change : "")),
       "Персон: " + (f.persons || 1)]).concat(f.comment ? ["Комментарий: " + f.comment] : []).join("\n");
-    view = "done"; $("#dTitle").textContent = "Заказ собран";
-    $("#dBody").innerHTML = '<div class="done-ic">' + ic("check") + '</div><p style="text-align:center;margin-bottom:14px">Позвоните нам или отправьте заказ сообщением — оператор подтвердит его и назовёт время доставки.</p><div class="order-text" id="oText">' + esc(text) + "</div>";
+    if (ORDER_URL) { sendOrder(f, text, t + outFee); return; }
+    showManual(text);
+  }
+
+  /* ---------- send order to admin (order.php → VK/Telegram), fallback to manual ---------- */
+  function sendOrder(f, text, sum) {
+    var btn = $('#dFoot [type="submit"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span aria-live="polite">Отправляем заказ…</span>'; }
+    var payload = {
+      items: Object.keys(cart).map(function (id) { return { id: id, q: cart[id].q }; }),
+      type: f.type, name: f.name, phone: f.phone, street: f.street, apt: f.apt, ent: f.ent, floor: f.floor, code: f.code,
+      zone: f.zone || "", when: f.when, time: f.time, pay: f.pay, change: f.change, persons: f.persons, comment: f.comment,
+      agree: !!f.agree, website: ($("#fWebsite") || {}).value || ""
+    };
+    var req = ORDER_URL === "demo"
+      ? new Promise(function (ok) { setTimeout(function () { ok({ ok: true, number: "ДЕМО", demo: true }); }, 900); })
+      : fetch(ORDER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (j) { j.status = r.status; return j; }); });
+    req.then(function (res) {
+      if (!res || !res.ok) throw res || {};
+      showSuccess(res, f, sum);
+    }).catch(function (err) {
+      var why = err && err.error === "too_many" ? "Слишком много заказов подряд. Подождите несколько минут или позвоните нам." : "Не получилось отправить заказ через сайт. Позвоните нам — примем по телефону.";
+      showManual(text, why);
+    });
+  }
+  function showSuccess(res, f, sum) {
+    view = "done"; $("#dTitle").textContent = "Заказ отправлен";
+    $("#dBody").innerHTML = '<div class="done-ic">' + ic("check") + '</div><h3 style="text-align:center;font-size:22px;margin-bottom:8px">Спасибо, заказ принят!</h3>' +
+      '<p style="text-align:center;color:var(--ink-2)">Номер заказа: <b>' + esc(res.number) + "</b>. Оператор перезвонит на <b>" + esc(f.phone) + "</b> в течение 5–10 минут, чтобы подтвердить заказ и время доставки.</p>" +
+      '<div class="progress" style="margin-top:16px"><div class="row" style="margin:0"><span>Сумма заказа</span><span><b>' + rub(sum) + "</b></span></div></div>" +
+      (res.demo ? '<p class="note" style="text-align:center">Демо-версия: в рабочей версии заказ сразу придёт администратору сообщением во «ВКонтакте».</p>' : "");
+    $("#dFoot").innerHTML = '<div class="stack"><button type="button" class="btn btn-b" data-close>Хорошо</button><a class="btn btn-text" href="tel:' + PHONE + '">Не перезвонили? Позвоните нам: 6-11-99</a></div>';
+    var ids = Object.keys(cart); cart = {}; ids.forEach(refresh); refresh();
+  }
+  function showManual(text, why) {
+    view = "done"; $("#dTitle").textContent = why ? "Заказ не отправлен" : "Заказ собран";
+    $("#dBody").innerHTML = (why ? '<p class="ferr" role="alert" style="font-size:14px;margin-bottom:12px">' + esc(why) + "</p>" : '<div class="done-ic">' + ic("check") + "</div>") + '<p style="text-align:center;margin-bottom:14px">Позвоните нам или отправьте заказ сообщением — оператор подтвердит его и назовёт время доставки.</p><div class="order-text" id="oText">' + esc(text) + "</div>";
     $("#dFoot").innerHTML = '<div class="stack"><a class="btn btn-b" href="tel:' + PHONE + '">' + ic("phone") + 'Позвонить: 6-11-99</a><button type="button" class="btn btn-o" id="copyOrder">Скопировать текст заказа</button><a class="btn btn-o" href="https://vk.me/ya_mishki" target="_blank" rel="noopener" id="vkOrder">Отправить во ВКонтакте</a><button type="button" class="btn btn-text" id="newOrder">Очистить корзину</button></div>';
     var copy = function () {
       var done = function () { toast("Текст заказа скопирован"); };
