@@ -293,11 +293,11 @@
     });
   }
   function showSuccess(res, f, sum) {
-    view = "done"; $("#dTitle").textContent = "Заказ отправлен";
-    $("#dBody").innerHTML = '<div class="done-ic">' + ic("check") + '</div><h3 style="text-align:center;font-size:22px;margin-bottom:8px">Спасибо, заказ принят!</h3>' +
+    view = "done"; $("#dTitle").textContent = res.demo ? "Демо: заказ оформлен" : "Заказ отправлен";
+    $("#dBody").innerHTML = '<div class="done-ic">' + ic("check") + '</div><h3 style="text-align:center;font-size:22px;margin-bottom:8px">' + (res.demo ? "Так клиент увидит подтверждение" : "Спасибо, заказ принят!") + '</h3>' +
       '<p style="text-align:center;color:var(--ink-2)">Номер заказа: <b>' + esc(res.number) + "</b>. Оператор перезвонит на <b>" + esc(f.phone) + "</b> в течение 5–10 минут, чтобы подтвердить заказ и время доставки.</p>" +
       '<div class="progress" style="margin-top:16px"><div class="row" style="margin:0"><span>Сумма заказа</span><span><b>' + rub(sum) + "</b></span></div></div>" +
-      (res.demo ? '<p class="note" style="text-align:center">Демо-версия: в рабочей версии заказ сразу придёт администратору сообщением во «ВКонтакте».</p>' : "");
+      (res.demo ? '<p class="note" style="text-align:center">Это демо-версия: заказ никуда не отправлен. Приём заказов во «ВКонтакте» подключим после вашего согласия — тогда заказ сразу будет приходить администратору сообщением.</p>' : "");
     $("#dFoot").innerHTML = '<div class="stack"><button type="button" class="btn btn-b" data-close>Хорошо</button><a class="btn btn-text" href="tel:' + PHONE + '">Не перезвонили? Позвоните нам: 6-11-99</a></div>';
     var ids = Object.keys(cart); cart = {}; ids.forEach(refresh); refresh();
   }
@@ -387,6 +387,8 @@
     else if (t.hasAttribute("data-close")) { if (t.tagName !== "A") e.preventDefault(); closeAll(); }
   });
   $("#ov").onclick = closeAll;
+  var db = $("#demoBar");
+  if (db) { if (store.get("ym_demo_hide", false)) db.remove(); else $("#demoX").onclick = function () { store.set("ym_demo_hide", true); db.remove(); }; }
 
   /* ---------- pickup map: loads only on click (Yandex may set cookies) ---------- */
   document.addEventListener("click", function (e) {
